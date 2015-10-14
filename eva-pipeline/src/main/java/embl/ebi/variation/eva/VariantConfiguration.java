@@ -1,5 +1,29 @@
+/*
+ * Copyright 2015 EMBL - European Bioinformatics Institute
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package embl.ebi.variation.eva;
 
+
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.sql.SQLException;
+import java.util.MissingResourceException;
+
+import javax.sql.DataSource;
 
 import org.opencb.biodata.models.variant.VariantSource;
 import org.opencb.datastore.core.ObjectMap;
@@ -19,7 +43,6 @@ import org.springframework.batch.core.configuration.annotation.StepBuilderFactor
 import org.springframework.batch.core.configuration.support.JobRegistryBeanPostProcessor;
 import org.springframework.batch.core.explore.JobExplorer;
 import org.springframework.batch.core.job.builder.JobBuilder;
-import org.springframework.batch.core.job.builder.JobFlowBuilder;
 import org.springframework.batch.core.job.builder.SimpleJobBuilder;
 import org.springframework.batch.core.launch.JobLauncher;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
@@ -33,17 +56,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
-import javax.sql.DataSource;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.sql.SQLException;
-import java.util.*;
+import embl.ebi.variation.eva.pipeline.tasks.VariantLoadTasklet;
+import embl.ebi.variation.eva.pipeline.tasks.VariantTransformTasklet;
 
 @Configuration
 @EnableBatchProcessing
@@ -152,7 +169,6 @@ public class VariantConfiguration {
 
 
         // true: every job execution will do this step, even if this step is COMPLETED
-        // false: if the job was aborted and is relaunched, this step will NOT be done again
         tasklet.allowStartIfComplete(true);
 
         return tasklet.build();
@@ -161,25 +177,9 @@ public class VariantConfiguration {
 
     public Step transform(StepBuilderFactory stepBuilderFactory) {
         StepBuilder step1 = stepBuilderFactory.get("transform");
-        TaskletStepBuilder tasklet = step1.tasklet(new Tasklet() {
-            @Override
-            public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext) throws Exception {
-                logger.info("transform file " + config.input + " to " + config.outputDir);
+        TaskletStepBuilder tasklet = step1.tasklet(new VariantTransformTasklet(
+        		variantStorageManager, variantOptions, outdirUri, nextFileUri, pedigreeUri));
 
-                logger.info("Extract variants '{}'", nextFileUri);
-                variantStorageManager.extract(nextFileUri, outdirUri, variantOptions);
-
-                logger.info("PreTransform variants '{}'", nextFileUri);
-                variantStorageManager.preTransform(nextFileUri, variantOptions);
-                logger.info("Transform variants '{}'", nextFileUri);
-                variantStorageManager.transform(nextFileUri, pedigreeUri, outdirUri, variantOptions);
-                logger.info("PostTransform variants '{}'", nextFileUri);
-                variantStorageManager.postTransform(nextFileUri, variantOptions);
-                return RepeatStatus.FINISHED;
-            }
-        });
-
-        // true: every job execution will do this step, even if this step is COMPLETED
         // false: if the job was aborted and is relaunched, this step will NOT be done again
         tasklet.allowStartIfComplete(false);
 
@@ -189,22 +189,9 @@ public class VariantConfiguration {
 
     public Step load(StepBuilderFactory stepBuilderFactory) {
         StepBuilder step1 = stepBuilderFactory.get("load");
-        TaskletStepBuilder tasklet = step1.tasklet(new Tasklet() {
-            @Override
-            public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext) throws Exception {
+        TaskletStepBuilder tasklet = step1.tasklet(new VariantLoadTasklet(
+        		variantStorageManager, variantOptions, outdirUri, nextFileUri, transformedVariantsUri));
 
-                logger.info("-- PreLoad variants -- {}", nextFileUri);
-                variantStorageManager.preLoad(transformedVariantsUri, outdirUri, variantOptions);
-                logger.info("-- Load variants -- {}", nextFileUri);
-                variantStorageManager.load(transformedVariantsUri, variantOptions);
-                logger.info("-- PostLoad variants -- {}", nextFileUri);
-                variantStorageManager.postLoad(transformedVariantsUri, outdirUri, variantOptions);
-                return RepeatStatus.FINISHED;
-            }
-        });
-
-
-        // true: every job execution will do this step, even if this step is COMPLETED
         // false: if the job was aborted and is relaunched, this step will NOT be done again
         tasklet.allowStartIfComplete(false);
         return tasklet.build();
