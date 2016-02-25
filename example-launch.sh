@@ -11,6 +11,7 @@ java -jar eva-pipeline/target/eva-pipeline-0.1.jar \
  dbName=batch \
  samples=sample1,sample2,sample3,sample4 \
  storageEngine=mongodb \
+ overwriteStats=true \
  compressGenotypes=true \
  compressExtension=.gz \
  includeSrc=FIRST_8_COLUMNS \
