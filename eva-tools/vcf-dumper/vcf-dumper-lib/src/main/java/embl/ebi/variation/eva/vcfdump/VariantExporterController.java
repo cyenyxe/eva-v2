@@ -70,6 +70,7 @@ public class VariantExporterController {
     private OutputStream outputStream;
     private Path outputFilePath;
     private int failedVariants;
+    private String outputFileName;
 
 
     public VariantExporterController(String species, String dbName, List<String> studies, OutputStream outputStream,
@@ -77,6 +78,9 @@ public class VariantExporterController {
             throws IllegalAccessException, ClassNotFoundException, InstantiationException, StorageManagerException, URISyntaxException {
         this(species, dbName, studies, queryParameters);
         this.outputStream = outputStream;
+        LocalDateTime now = LocalDateTime.now();
+        outputFileName = species + "_exported_" + now + ".vcf";
+
     }
 
 
@@ -269,5 +273,9 @@ public class VariantExporterController {
 
     public int getFailedVariants() {
         return failedVariants;
+    }
+
+    public String getOutputFileName() {
+        return outputFileName;
     }
 }
